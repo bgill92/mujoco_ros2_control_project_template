@@ -1,0 +1,35 @@
+<mujoco model="my_robot">
+  <compiler angle="radian" meshdir="assets/" texturedir="assets/"/>
+  <worldbody>
+    <body name="link1" pos="0 0 0.05">
+      <inertial pos="0 0 0.1" mass="0.5" diaginertia="0.00178 0.00178 0.000225"/>
+      <joint name="joint1" range="-3.14159 3.14159" actuatorfrcrange="-10 10" damping="1" armature="0.01"/>
+      <body name="link2" pos="0 0 0.2">
+        <inertial pos="0 0 0.125" mass="0.3" diaginertia="0.0016 0.0016 8e-05"/>
+        <joint name="joint2" range="-1.5708 1.5708" actuatorfrcrange="-10 10" axis="0 1 0" damping="1" armature="0.01"/>
+        <geom size="0.02 0.02 0.125" pos="0 0 0.125" type="box" class="collision"/>
+        <geom size="0.02 0.02 0.125" pos="0 0 0.125" type="box" class="visual"/>
+        <site name="link2" pos="0 0 0" quat="1.0 0 0 0"/>
+      </body>
+      <geom size="0.03 0.1" pos="0 0 0.1" type="cylinder" class="collision"/>
+      <geom size="0.03 0.1" pos="0 0 0.1" type="cylinder" class="visual"/>
+      <site name="link1" pos="0 0 0" quat="1.0 0 0 0"/>
+    </body>
+    <geom size="0.1 0.1 0.025" pos="0 0 0.025" type="box" class="collision"/>
+    <geom size="0.1 0.1 0.025" pos="0 0 0.025" type="box" class="visual"/>
+    <site name="base_link" pos="0 0 0" quat="1.0 0 0 0"/>
+  </worldbody>
+  <default>
+    <geom contype="0" conaffinity="0"/>
+    <default class="visual">
+      <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+    </default>
+    <default class="collision">
+      <geom group="3" type="mesh"/>
+    </default>
+  </default>
+  <actuator>
+    <position name="joint1" joint="joint1" kp="50" dampratio="1.0" ctrlrange="-3.14159 3.14159"/>
+    <position name="joint2" joint="joint2" kp="50" dampratio="1.0" ctrlrange="-1.5708 1.5708"/>
+  </actuator>
+</mujoco>

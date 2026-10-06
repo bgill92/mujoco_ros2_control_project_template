@@ -1,0 +1,38 @@
+<mujoco_inputs>
+
+  <!-- Copied verbatim into the MJCF by the converter. -->
+  <raw_inputs>
+    <!-- obj2mjcf emits mesh geoms with class="visual"/"collision", so both classes must exist.
+         The global default keeps geoms from colliding and jamming joints; opt specific geoms
+         back in (contype/conaffinity) when you need contacts. -->
+    <default>
+      <geom contype="0" conaffinity="0"/>
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <!-- URDF <mimic> joints are dropped by the converter. Replace each with an equality, e.g.
+    <equality>
+      <joint joint1="finger_right" joint2="finger_left" polycoef="0 -1 0 0 0"/>
+    </equality>
+    and expose the mimic joint in <ros2_control> with state interfaces only. -->
+
+    <!-- Actuator names must equal joint names: mujoco_ros2_control matches them by name. -->
+    <actuator>
+      <position name="joint1" joint="joint1" kp="50" dampratio="1.0" ctrlrange="-3.14159 3.14159"/>
+      <position name="joint2" joint="joint2" kp="50" dampratio="1.0" ctrlrange="-1.5708 1.5708"/>
+    </actuator>
+  </raw_inputs>
+
+  <processed_inputs>
+    <!-- Real joint damping sits outside the actuator force clamp, so it keeps a saturated
+         position actuator from limit cycling. -->
+    <modify_element type="joint" name="joint1" damping="1" armature="0.01"/>
+    <modify_element type="joint" name="joint2" damping="1" armature="0.01"/>
+  </processed_inputs>
+
+</mujoco_inputs>

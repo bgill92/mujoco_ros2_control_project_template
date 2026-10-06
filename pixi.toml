@@ -1,0 +1,42 @@
+[workspace]
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+license-file = "LICENSE"
+channels = ["https://prefix.dev/robostack-lyrical", "conda-forge"]
+name = "my_robot"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+# Add upstream description packages from external_packages/ to --base-paths, e.g.
+# `--base-paths src external_packages/<repo>/<robot>_description`. Only build what compiles on this distro.
+build = "colcon build --symlink-install --base-paths src"
+# Converts the URDF to MJCF in src/my_robot_simulation/mujoco/; rerun after changing the URDF or mujoco_inputs.xml.
+gen-mjcf = { cmd = "bash src/my_robot_simulation/scripts/gen_mjcf.sh", depends-on = ["build"] }
+# Extra args pass through to the launch file, e.g. `pixi run sim headless:=true`. Builds first so
+# newly generated MJCF files are installed.
+sim = { cmd = "bash -c 'source install/setup.bash && ros2 launch my_robot_simulation sim.launch.py \"$@\"' --", depends-on = ["build"] }
+
+[dependencies]
+ros-lyrical-desktop = ">=0.13.0,<0.14"
+colcon-common-extensions = ">=0.3.0,<0.4"
+cxx-compiler = ">=2.0.0,<3"
+c-compiler = ">=2.0.0,<3"
+cmake = ">=4.4.3,<5"
+ninja = ">=1.13.2,<2"
+pkg-config = ">=0.29.2,<0.30"
+ros-lyrical-xacro = ">=2.1.1,<3"
+ros-lyrical-joint-state-publisher = ">=2.4.3,<3"
+ros-lyrical-joint-state-publisher-gui = ">=2.4.3,<3"
+ros-lyrical-mujoco-ros2-control = ">=0.1.2,<0.2"
+ros-lyrical-controller-manager = ">=6.10.1,<7"
+ros-lyrical-joint-state-broadcaster = ">=6.9.0,<7"
+ros-lyrical-joint-trajectory-controller = ">=6.9.0,<7"
+ros-lyrical-ros2controlcli = ">=6.10.1,<7"
+# Python dependencies of mujoco_ros2_control's URDF -> MJCF converter.
+mujoco-python = ">=3.14.0,<4"
+trimesh = ">=5.1.1,<6"
+pycollada = ">=0.9.3,<0.10"
+
+[pypi-dependencies]
+obj2mjcf = ">=0.0.25, <0.0.26"
