@@ -19,7 +19,7 @@ Add a `meshes/` directory for your own or modified meshes, and add `meshes` to t
 ## Running
 
 ```bash
-pixi run bash -c "source install/setup.bash && ros2 launch my_robot_description display.launch.py"
+pixi run display
 ```
 
 | Launch argument | Default | Effect |
@@ -35,7 +35,9 @@ pixi run bash -c "source install/setup.bash && ros2 launch my_robot_description 
 | `headless` | `false` | Runs MuJoCo without its viewer. |
 
 With `ros2_control:=mujoco`, both joints have a `position` command interface and `position` and
-`velocity` state interfaces. Each commanded joint needs a MuJoCo actuator with the same name in
+`velocity` state interfaces. Both start at 0; pass `initial:=<rad>` to the `position_joint`
+macro to change the starting pose, keeping it strictly inside the joint limits (exactly on a limit,
+drift trips the joint limiter). Each commanded joint needs a MuJoCo actuator with the same name in
 `my_robot_simulation/mujoco/mujoco_inputs.xml`.
 
 ## Robot structure
