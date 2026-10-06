@@ -28,7 +28,7 @@ after each step.
 pixi run gen-mjcf                          # build, then URDF -> MJCF (already committed; rerun after URDF changes)
 pixi run sim                               # MuJoCo viewer + RViz
 pixi run sim headless:=true rviz:=false    # no windows
-pixi run bash -c "source install/setup.bash && ros2 launch my_robot_description display.launch.py"  # RViz + joint sliders, no physics
+pixi run display                          # RViz + joint sliders, no physics
 ```
 
 Move the arm (in `pixi shell`, after `source install/setup.bash`):
@@ -44,7 +44,7 @@ Physics only, no ROS: `pixi run python -m mujoco.viewer --mjcf=src/my_robot_simu
 
 ```
 .
-├── pixi.toml                     # environment + tasks: build, gen-mjcf, sim
+├── pixi.toml                     # environment + tasks: build, gen-mjcf, display, sim
 ├── pixi.lock                     # pinned environment; commit it
 ├── AGENTS.md / CLAUDE.md         # rules for coding agents (pixi only, don't edit submodules, generated files)
 ├── external_packages/            # vendor repos as git submodules, never edited (see its README)
@@ -106,15 +106,18 @@ These are the decisions that kept emma maintainable; the template is built aroun
 2. **Bring in the robot.** Either write links/joints in `urdf/<name>.urdf.xacro`, or add vendor
    repos (`git submodule add -b <branch> <url> external_packages/<repo>`), add their description
    package to the `build` task, and `xacro:include` their URDF. Check
-   [What the URDF needs](#what-the-urdf-needs). View it with `display.launch.py` before simulating.
+   [What the URDF needs](#what-the-urdf-needs). View it with `pixi run display` before simulating.
    Add `meshes` to the `install(DIRECTORY ...)` line in the description `CMakeLists.txt` once you have one.
 3. **Expose joints to ros2_control.** List each commanded joint in the `<ros2_control>` block
-   (the `position_joint` macro). Mimic/passive joints get state interfaces only.
+   (the `position_joint` macro). Mimic/passive joints get state interfaces only. Its `initial`
+   argument sets the starting pose in MuJoCo (e.g. a folded arm); keep it strictly inside the
+   joint limits.
 4. **Add MuJoCo actuators** in `mujoco_inputs.xml`, **named exactly like their joints** — the plugin
    matches by name. Set `ctrlrange` to the joint limits. Add joint damping/armature there too.
 5. **Mobile base?** Add `--add_free_joint` to the converter call in `gen_mjcf.sh`. The root link
    becomes a free body; its ground-truth pose is published on `/simulator/floating_base_state`. You
    will need contact geometry (wheels or a stand-in box) and probably a post-processing script.
+   See [Driving a wheeled base](#driving-a-wheeled-base) for what emma's mecanum base needed.
 6. **Configure controllers** in `config/controllers.yaml` and list them in the spawner in
    `sim.launch.py`; add each controller package to `pixi.toml` and the sim `package.xml`. A controller
    must not share a name with a joint (emma's `gripper_action_controller` vs. joint `gripper_controller`).
@@ -147,13 +150,15 @@ copy back. When the converter output needs fixing, write a small Python script t
 `<work>/out/mujoco_description_formatted.xml` in place (idempotent, `xml.etree`) and call it where
 the comment in `gen_mjcf.sh` says. emma's
 [`postprocess_mjcf.py`](https://github.com/bgill92/experimental_mobile_manipulator/blob/main/src/emma_simulation/scripts/postprocess_mjcf.py)
-does three things worth copying when you hit them:
+does four things worth copying when you hit them:
 
 - **Restores dropped inertials.** With body fusion on, the converter drops the `<inertial>` of
   bodies whose mass comes only from fused static links. The compiled reference URDF in the output
   dir still has the right values; copy them back with `mujoco.MjModel.from_xml_path`.
 - **Rescales meshes** by filename prefix (the units problem above).
-- **Adds contact geometry** (a box stand-in for wheels so a free base rests on the floor).
+- **Adds contact geometry.** emma first used a box stand-in so the free base rested on the floor,
+  then replaced it with passive mecanum rollers on each wheel body.
+- **Pretty-prints** the result (`ET.indent`) so regenerated MJCF diffs stay readable.
 
 Other things to know:
 - The global geom default in `mujoco_inputs.xml` turns collisions **off** (`contype=0
@@ -164,6 +169,46 @@ Other things to know:
 - `--symlink-install` only links files that exist at build time, so build after generating. The
   `sim` task already depends on `build`; launching `ros2 launch` directly after `gen-mjcf` without
   a build fails with `Error opening file 'mujoco_description_formatted.xml'`.
+
+## Driving a wheeled base
+
+What it took to drive emma's mecanum base
+([`0fcbe81`](https://github.com/bgill92/experimental_mobile_manipulator/commit/0fcbe81),
+[`d42085d`](https://github.com/bgill92/experimental_mobile_manipulator/commit/d42085d)).
+A diff-drive base needs the same pieces, minus the rollers.
+
+- **Wheel joints in the URDF.** One `continuous` link per wheel with an `<inertial>` and a
+  non-zero velocity limit. If the vendor base mesh already draws the wheels, the links need no
+  visual. In the `<ros2_control>` block they get a `velocity` command interface.
+- **Motor actuators, not velocity actuators.** Use `<motor>` (torque) actuators named after the
+  wheel joints, with `ctrlrange` at the motor's torque limit. mujoco_ros2_control closes the
+  velocity loop itself from a PID file passed through the `pids_config_file` hardware param
+  (a xacro arg, filled in by `sim.launch.py`). emma's
+  [`wheel_pids.yaml`](https://github.com/bgill92/experimental_mobile_manipulator/blob/main/src/emma_simulation/config/wheel_pids.yaml)
+  shows the format. A velocity actuator fights the wheel contacts.
+- **Wheel armature.** A bare wheel is so light that a 100 Hz velocity PID oscillates. Joint
+  `armature` in `mujoco_inputs.xml` stands in for the gear motor's reflected inertia.
+- **Mecanum rollers.** MuJoCo has no anisotropic friction, so each wheel gets passive roller
+  spheres on hinges at 45° to the axle, added in post-processing (ported from
+  [JunHeonYoon/mujoco_mecanum](https://github.com/JunHeonYoon/mujoco_mecanum), MIT). Upstream's
+  roller tilt construction comes out far below 45° on a small wheel and strafing crawls; set the
+  axis angle directly. Opposite corners share a tilt so the rollers form the X the controller assumes.
+- **Controller kinematics match the URDF.** Wheel radius and wheel offsets in `controllers.yaml`
+  must match the xacro. If the base mesh is not centred on the base frame, use the controller's
+  `base_frame_offset`.
+- **Odometry TF.** `mecanum_drive_controller` publishes `odom → base_footprint` on `~/tf_odometry`,
+  not `/tf`. Controllers ignore the process's global remaps, so remap per controller in
+  `controllers.yaml`: `node_options_args: ["-r", "~/tf_odometry:=/tf"]`.
+- **A sim RViz config.** Give the sim package its own `rviz/sim.rviz` with fixed frame `odom` and
+  an Odometry display, so the base is seen moving (add `rviz` to its `install(DIRECTORY ...)`).
+- **A physics-only check.** emma's
+  [`check_mecanum.py`](https://github.com/bgill92/experimental_mobile_manipulator/blob/main/src/emma_simulation/scripts/check_mecanum.py)
+  drives forward, sideways and in rotation in plain MuJoCo, reusing the gains and kinematics from
+  the YAML files, and fails if the base moves the wrong way. It catches flipped roller tilts and
+  wrong kinematics without launching ROS.
+
+Drive it with `ros2 topic pub -r 10 /mecanum_drive_controller/reference geometry_msgs/msg/TwistStamped
+"{twist: {linear: {x: 0.1}}}"`; `reference_timeout` stops the base when messages stop.
 
 ## Expected warnings
 
